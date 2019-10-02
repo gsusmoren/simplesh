@@ -12,7 +12,7 @@
       "out": "^$"
     },
     {
-      "cmd": "cwd | tr / : | cut -d : -f 3",
+      "cmd": "echo -n l1 > f3 ; echo l2 >> f3 ; echo -n l3 ; cat f3 | grep l1",
       "out": "^l3l1l2\\r\\n$"
     },
     {
@@ -93,7 +93,7 @@
 
     {
       "cmd": "cd ; cwd",
-      "out": "^cwd: /home/alumno\\r\\n$"
+      "out": "^cwd: /home/gsus\\r\\n$"
     },
     {
       "cmd": "cd -",

@@ -824,12 +824,13 @@ void run_cd(struct execcmd *cmd)
         else
         {
             //ERROR
-            error("Directorio '%s' no encontrado\n", cmd->argv[1]);
+            error("No existe el directorio '%s'\n", cmd->argv[1]);
         }
     }
 }
 //funcion que ejecuta el comando una vez comprueba si este es externo o interno
 int exec_comp(struct execcmd *ecmd)
+
 {
     //cmd puede no ser siempre un exec
 
@@ -850,7 +851,7 @@ int exec_comp(struct execcmd *ecmd)
         break;
     case 3: //exit
 
-        free(ecmd); 
+        free(ecmd);
         run_exit();
         break;
     }
@@ -893,8 +894,8 @@ void run_cmd(struct cmd *cmd)
                 perror("open");
                 exit(EXIT_FAILURE);
             }
-
-            if (rcmd->cmd->type == EXEC)
+            //comprobacion
+            if (rcmd->cmd->type == EXEC && !is_interno(((struct execcmd *)rcmd->cmd)->argv[0]))
                 exec_cmd((struct execcmd *)rcmd->cmd);
             else
                 run_cmd(rcmd->cmd);
@@ -910,7 +911,7 @@ void run_cmd(struct cmd *cmd)
         break;
 
     case PIPE:
-         pcmd = (struct pipecmd *)cmd;
+        pcmd = (struct pipecmd *)cmd;
         if (pipe(p) < 0)
         {
             perror("pipe");
@@ -925,7 +926,8 @@ void run_cmd(struct cmd *cmd)
             TRY(close(p[0]));
             TRY(close(p[1]));
             //comprobar
-            if (pcmd->left->type == EXEC)
+
+            if (pcmd->left->type == EXEC && !is_interno(((struct execcmd *)pcmd->left)->argv[0]))
                 exec_cmd((struct execcmd *)pcmd->left);
             else
                 run_cmd(pcmd->left);
@@ -939,7 +941,7 @@ void run_cmd(struct cmd *cmd)
             TRY(dup(p[0]));
             TRY(close(p[0]));
             TRY(close(p[1]));
-            if (pcmd->right->type == EXEC)
+            if (pcmd->right->type == EXEC && !is_interno(((struct execcmd *)pcmd->right)->argv[0]))
                 exec_cmd((struct execcmd *)pcmd->right);
             else
                 run_cmd(pcmd->right);
@@ -957,7 +959,7 @@ void run_cmd(struct cmd *cmd)
         bcmd = (struct backcmd *)cmd;
         if (fork_or_panic("fork BACK") == 0)
         {
-            if (bcmd->cmd->type == EXEC)
+            if (bcmd->cmd->type == EXEC && !is_interno(((struct execcmd *)bcmd->cmd)->argv[0]))
                 exec_cmd((struct execcmd *)bcmd->cmd);
             else
                 run_cmd(bcmd->cmd);
@@ -1097,9 +1099,9 @@ void free_cmd(struct cmd *cmd)
 
         free_cmd(pcmd->left);
         free_cmd(pcmd->right);
-
-        free(pcmd->right);
-        free(pcmd->left);
+        //TODO
+        // free(pcmd->right);
+        //free(pcmd->left);
         break;
 
     case BACK:
