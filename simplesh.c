@@ -1081,7 +1081,7 @@ void free_cmd(struct cmd *cmd)
         rcmd = (struct redrcmd *)cmd;
         free_cmd(rcmd->cmd);
 
-        free(rcmd->cmd);
+        // free(rcmd->cmd);
         break;
 
     case LIST:
@@ -1089,9 +1089,9 @@ void free_cmd(struct cmd *cmd)
 
         free_cmd(lcmd->left);
         free_cmd(lcmd->right);
-
-        free(lcmd->right);
-        free(lcmd->left);
+        //TODO
+        // free(lcmd->right);
+        //free(lcmd->left);
         break;
 
     case PIPE:
@@ -1109,7 +1109,7 @@ void free_cmd(struct cmd *cmd)
 
         free_cmd(bcmd->cmd);
 
-        free(bcmd->cmd);
+        //  free(bcmd->cmd);
         break;
 
     case SUBS:
@@ -1117,7 +1117,7 @@ void free_cmd(struct cmd *cmd)
 
         free_cmd(scmd->cmd);
 
-        free(scmd->cmd);
+        //free(scmd->cmd);
         break;
 
     case INV:
