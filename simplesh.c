@@ -798,6 +798,8 @@ void run_exit()
 {
     exit(EXIT_SUCCESS);
 }
+
+//Comprobar el numero de argumentos y sacar ese error.
 void run_cd(struct execcmd *cmd)
 {
     char diract[PATH_MAX];
@@ -808,8 +810,14 @@ void run_cd(struct execcmd *cmd)
         char *home = getenv("HOME");
         chdir(home);
     }
+    else if (cmd->argc > 2)
+    {
+        fprintf(stderr, "run_cd: Demasiados argumentos\n");
+    }
     else if (strcmp(cmd->argv[1], "-") == 0)
     {
+        if (getenv("OLDPWD") == NULL)
+            fprintf(stderr, "run_cd: Variable OLDPWD no definida\n");
         chdir(getenv("OLDPWD"));
     }
     else
@@ -824,7 +832,7 @@ void run_cd(struct execcmd *cmd)
         else
         {
             //ERROR
-            error("No existe el directorio '%s'\n", cmd->argv[1]);
+            fprintf(stderr, "run_cd: No existe el directorio '%s'\n", cmd->argv[1]);
         }
     }
 }
@@ -867,7 +875,7 @@ void run_cmd(struct cmd *cmd)
     struct backcmd *bcmd;
     struct subscmd *scmd;
     int p[2];
-    int fd;
+    int fd; //file descriptor
 
     DPRINTF(DBG_TRACE, "STR\n");
 
@@ -885,23 +893,41 @@ void run_cmd(struct cmd *cmd)
 
     case REDR:
         rcmd = (struct redrcmd *)cmd;
-        if (fork_or_panic("fork REDR") == 0)
+        // if (is_interno(((struct execcmd *)rcmd->cmd)->argv[0]))
+        // {
+        //     run_cmd(rcmd->cmd);
+        //         }
+        // else
+        if (is_interno(((struct execcmd *)rcmd->cmd)->argv[0]))
         {
-            TRY(close(rcmd->fd));
-            //amhadimos el tercer campo para poder actualizar, pus open tiene 3 parametros ahora
             if ((fd = open(rcmd->file, rcmd->flags, rcmd->mode)) < 0)
             {
                 perror("open");
                 exit(EXIT_FAILURE);
             }
-            //comprobacion
-            if (rcmd->cmd->type == EXEC && !is_interno(((struct execcmd *)rcmd->cmd)->argv[0]))
-                exec_cmd((struct execcmd *)rcmd->cmd);
-            else
-                run_cmd(rcmd->cmd);
-            exit(EXIT_SUCCESS);
+            run_cmd(rcmd->cmd);
         }
-        TRY(wait(NULL));
+        else
+        {
+
+            if (fork_or_panic("fork REDR") == 0)
+            {
+                TRY(close(rcmd->fd));
+                //amhadimos el tercer campo para poder actualizar, pus open tiene 3 parametros ahora
+                if ((fd = open(rcmd->file, rcmd->flags, rcmd->mode)) < 0)
+                {
+                    perror("open");
+                    exit(EXIT_FAILURE);
+                }
+
+                if (rcmd->cmd->type == EXEC /*&& !is_interno(((struct execcmd *)rcmd->cmd)->argv[0])*/)
+                    exec_cmd((struct execcmd *)rcmd->cmd);
+                else
+                    run_cmd(rcmd->cmd);
+                exit(EXIT_SUCCESS);
+            }
+            TRY(wait(NULL));
+        }
         break;
 
     case LIST:
@@ -926,7 +952,6 @@ void run_cmd(struct cmd *cmd)
             TRY(close(p[0]));
             TRY(close(p[1]));
             //comprobar
-
             if (pcmd->left->type == EXEC && !is_interno(((struct execcmd *)pcmd->left)->argv[0]))
                 exec_cmd((struct execcmd *)pcmd->left);
             else
@@ -937,7 +962,7 @@ void run_cmd(struct cmd *cmd)
         // Ejecución del hijo de la derecha
         if (fork_or_panic("fork PIPE right") == 0)
         {
-            TRY(close(STDIN_FILENO));
+            TRY(close(STDIN_FILENO)); //cerrando entrada estandar
             TRY(dup(p[0]));
             TRY(close(p[0]));
             TRY(close(p[1]));
@@ -957,6 +982,7 @@ void run_cmd(struct cmd *cmd)
 
     case BACK:
         bcmd = (struct backcmd *)cmd;
+
         if (fork_or_panic("fork BACK") == 0)
         {
             if (bcmd->cmd->type == EXEC && !is_interno(((struct execcmd *)bcmd->cmd)->argv[0]))
@@ -1081,7 +1107,7 @@ void free_cmd(struct cmd *cmd)
         rcmd = (struct redrcmd *)cmd;
         free_cmd(rcmd->cmd);
 
-        free(rcmd->cmd);
+        // free(rcmd->cmd);
         break;
 
     case LIST:
@@ -1089,9 +1115,9 @@ void free_cmd(struct cmd *cmd)
 
         free_cmd(lcmd->left);
         free_cmd(lcmd->right);
-
-        free(lcmd->right);
-        free(lcmd->left);
+        //TODO
+        // free(lcmd->right);
+        //free(lcmd->left);
         break;
 
     case PIPE:
@@ -1108,8 +1134,8 @@ void free_cmd(struct cmd *cmd)
         bcmd = (struct backcmd *)cmd;
 
         free_cmd(bcmd->cmd);
-
-        free(bcmd->cmd);
+        //TODO
+        //free(bcmd->cmd);
         break;
 
     case SUBS:
@@ -1117,13 +1143,15 @@ void free_cmd(struct cmd *cmd)
 
         free_cmd(scmd->cmd);
 
-        free(scmd->cmd);
+        //free(scmd->cmd);
         break;
 
     case INV:
     default:
         panic("%s: estructura `cmd` desconocida\n", __func__);
     }
+    /* Están  apuntando a lo mismo, se liberaría dos veces en caso de dejar 
+    ambos 'free()' pues apuntan a la misma direccion de memoria ()*/
     free(cmd);
 }
 
@@ -1200,7 +1228,6 @@ void parse_args(int argc, char **argv)
         }
     }
 }
-//char[] internos = {"cwd", "cd", "exit"};
 
 int main(int argc, char **argv)
 {
