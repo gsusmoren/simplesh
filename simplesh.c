@@ -768,6 +768,7 @@ int is_interno(char *cmd)
     char *cwd = "cwd";
     char *cd = "cd";
     char *exit = "exit";
+    char *psplit = "psplit";
     if (cmd == 0)
         return 0;
     if (strcmp(cmd, cwd) == 0)
@@ -781,6 +782,10 @@ int is_interno(char *cmd)
     else if (strcmp(cmd, exit) == 0)
     {
         return 3;
+    }
+    else if (strcmp(cmd, psplit) == 0)
+    {
+        return 4;
     }
 
     return 0; //No interno.
@@ -836,6 +841,30 @@ void run_cd(struct execcmd *cmd)
         }
     }
 }
+void run_psplit(struct execcmd *ecmd)
+{ /*
+    int opt, flag, n;
+    flag = n = 0;
+    optind = 1;
+    while ((opt = getopt(argc, argv, "fn:h")) != -1)
+    {
+        switch (opt)
+        {
+        case 'f':
+            flag = 1;
+            break;
+        case 'n':
+            n = atoi(optarg);
+            break;
+        default:
+            fprintf(stderr, "Usage: %s [-f] [-n NUM]\n", argv[0]);
+            exit(EXIT_FAILURE);
+        }
+    }
+    for (int i = optind; i < argc; i++)
+        printf("%s\n", argv[i]);
+*/
+}
 //funcion que ejecuta el comando una vez comprueba si este es externo o interno
 int exec_comp(struct execcmd *ecmd)
 
@@ -862,6 +891,8 @@ int exec_comp(struct execcmd *ecmd)
         free(ecmd);
         run_exit();
         break;
+    case 4:
+        run_psplit(ecmd);
     }
     return numCmd;
 }
@@ -893,19 +924,19 @@ void run_cmd(struct cmd *cmd)
 
     case REDR:
         rcmd = (struct redrcmd *)cmd;
-        // if (is_interno(((struct execcmd *)rcmd->cmd)->argv[0]))
-        // {
-        //     run_cmd(rcmd->cmd);
-        //         }
-        // else
+
         if (is_interno(((struct execcmd *)rcmd->cmd)->argv[0]))
         {
+            //TRY(close(STDOUT_FILENO));
             if ((fd = open(rcmd->file, rcmd->flags, rcmd->mode)) < 0)
             {
                 perror("open");
                 exit(EXIT_FAILURE);
             }
+            p[1] = dup(1); //Necesitamos hacer una copia para no perderlo
+            TRY(dup2(fd, STDOUT_FILENO));
             run_cmd(rcmd->cmd);
+            TRY(dup2(p[1], STDOUT_FILENO));
         }
         else
         {
@@ -920,7 +951,7 @@ void run_cmd(struct cmd *cmd)
                     exit(EXIT_FAILURE);
                 }
 
-                if (rcmd->cmd->type == EXEC /*&& !is_interno(((struct execcmd *)rcmd->cmd)->argv[0])*/)
+                if (rcmd->cmd->type == EXEC)
                     exec_cmd((struct execcmd *)rcmd->cmd);
                 else
                     run_cmd(rcmd->cmd);
