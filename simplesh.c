@@ -43,6 +43,9 @@
 
 static const char *VERSION = "0.19";
 
+//Tamano maximo de BSIZE para psplit
+#define BSIZE_MAX 1048576
+
 // Niveles de depuración
 #define DBG_CMD (1 << 0)
 #define DBG_TRACE (1 << 1)
@@ -842,28 +845,63 @@ void run_cd(struct execcmd *cmd)
     }
 }
 void run_psplit(struct execcmd *ecmd)
-{ /*
-    int opt, flag, n;
-    flag = n = 0;
+{
+    int opt = 0;
+    int nlines = 0;
+    int nbytes = 1024; //numero maximo de bytes por fichero
+    int bsize = 1024;  //tamano en bytes de los bloques leidos
+    int error_lb = 0;
+    int f_error = 0;
     optind = 1;
-    while ((opt = getopt(argc, argv, "fn:h")) != -1)
+    while ((f_error == 0) && (opt = getopt(ecmd->argc, ecmd->argv, "l:b:s:h")) != -1)
     {
         switch (opt)
         {
-        case 'f':
-            flag = 1;
+        case 'h':
+            fprintf(stdout, "Uso : psplit [-l NLINES]  [-b NBYTES]   [-s BSIZE]  [-p PROCS] [FILE1]  [FILE2]...\n\tOpciones :\n\t-l NLINES Numero maximo de lineas por fichero.\n\t-b NBYTES Numero maximo de bytes por fichero.\n\t-s BSIZE Tamano en bytes de los bloques leidos de [FILEn] o stdin.\n\t-p PROCS Numero maximo de procesdos simultaneos.\n\t-h       Ayuda\n");
             break;
-        case 'n':
-            n = atoi(optarg);
+        case 'b':
+            error_lb++;
+            if (error_lb < 2)
+            {
+            }
+            break;
+        case 's':
+            bsize = atoi(optarg);
+            if (bsize < 1 || bsize > BSIZE_MAX)
+            {
+                f_error = 2; //se pasa de tamaño
+            }
+            break;
+        case 'l':
+            error_lb++;
+            if (error_lb < 2)
+            {
+                nlines = atoi(optarg);
+            }
+
             break;
         default:
-            fprintf(stderr, "Usage: %s [-f] [-n NUM]\n", argv[0]);
+            fprintf(stdout, "Uso : psplit [-l NLINES]  [-b NBYTES]   [-s BSIZE]  [-p PROCS] [FILE1]  [FILE2]...\n");
             exit(EXIT_FAILURE);
         }
     }
-    for (int i = optind; i < argc; i++)
-        printf("%s\n", argv[i]);
-*/
+    if (error_lb >= 2)
+    {
+        f_error = 1;
+    }
+    switch (f_error)
+    {
+    case 0:
+        printf("Sale por 0, f_error es 0\n");
+        break;
+    case 1: // error lb
+        fprintf(stderr, "Incompatibles, OUT\n");
+        break;
+    case 2: //error
+        fprintf(stderr, "MAX OUT\n");
+        break;
+    }
 }
 //funcion que ejecuta el comando una vez comprueba si este es externo o interno
 int exec_comp(struct execcmd *ecmd)
@@ -891,8 +929,9 @@ int exec_comp(struct execcmd *ecmd)
         free(ecmd);
         run_exit();
         break;
-    case 4:
+    case 4: //psplip
         run_psplit(ecmd);
+        break;
     }
     return numCmd;
 }
