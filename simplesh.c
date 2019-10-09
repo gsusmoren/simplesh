@@ -844,17 +844,19 @@ void run_cd(struct execcmd *cmd)
         }
     }
 }
-void run_psplit(struct execcmd *ecmd)
+void run_psplit(struct execcmd *cmd)
 {
     int opt = 0;
     int nlines = 0;
-    int nbytes = 1024; //numero maximo de bytes por fichero
+    int nbytes = 1024; //numero maximo de bytes por fichero , b
     int bsize = 1024;  //tamano en bytes de los bloques leidos
+
     int error_lb = 0;
     int f_error = 0;
     optind = 1;
-    while ((f_error == 0) && (opt = getopt(ecmd->argc, ecmd->argv, "l:b:s:h")) != -1)
+    while ((f_error == 0) && (opt = getopt(cmd->argc, cmd->argv, "l:b:s:h")) != -1)
     {
+
         switch (opt)
         {
         case 'h':
@@ -864,6 +866,7 @@ void run_psplit(struct execcmd *ecmd)
             error_lb++;
             if (error_lb < 2)
             {
+                //TODO
             }
             break;
         case 's':
@@ -879,7 +882,6 @@ void run_psplit(struct execcmd *ecmd)
             {
                 nlines = atoi(optarg);
             }
-
             break;
         default:
             fprintf(stdout, "Uso : psplit [-l NLINES]  [-b NBYTES]   [-s BSIZE]  [-p PROCS] [FILE1]  [FILE2]...\n");
@@ -887,13 +889,47 @@ void run_psplit(struct execcmd *ecmd)
         }
     }
     if (error_lb >= 2)
-    {
         f_error = 1;
+
+    char *buff[cmd->argc - optind]; //array con el nombre de los ficheros
+    int n_ficheros = 0;
+    for (int i = optind; i < cmd->argc; i++) //optint es index del primer fichero
+    {
+        buff[n_ficheros] = cmd->argv[i];
+        n_ficheros++;
+        //printf("%s\n", cmd->argv[i]);
     }
+
     switch (f_error)
     {
     case 0:
-        printf("Sale por 0, f_error es 0\n");
+        int fd = 0;
+        char *blect = malloc(bsize); //reservamos ese numero de bytes (bleidos)
+        if (nlines != 0)             //-l
+        {
+        }
+        else //-b
+        {    //de momento 1 fichero
+            if (fd = open(buff[0], O_RDONLY) != -1)
+            {
+                int i = 0; //indice para los archivos creados
+                int r = 0;
+
+                int fdaux = open(strcat(buff[0], i), O_WRONLY | O_CREAT);
+                //bytes leidos en ese read.
+                while ((r = read(fd, blect, bsize)) != 0 /*&& r <= nbytes*/) // lectura del fichero abierto anteriormente
+                {
+
+                    write(fdaux, blect, r);
+
+                    i++;
+                }
+            }
+            else
+            {
+                //Error no existe el archivo
+            }
+        }
         break;
     case 1: // error lb
         fprintf(stderr, "Incompatibles, OUT\n");
