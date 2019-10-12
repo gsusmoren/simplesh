@@ -902,41 +902,43 @@ void run_psplit(struct execcmd *cmd)
 
     switch (f_error)
     {
-    case 0:
-        int fd = 0;
-        char *blect = malloc(bsize); //reservamos ese numero de bytes (bleidos)
-        if (nlines != 0)             //-l
-        {
-        }
-        else //-b
-        {    //de momento 1 fichero
-            if (fd = open(buff[0], O_RDONLY) != -1)
-            {
-                int i = 0; //indice para los archivos creados
-                int r = 0;
-
-                int fdaux = open(strcat(buff[0], i), O_WRONLY | O_CREAT);
-                //bytes leidos en ese read.
-                while ((r = read(fd, blect, bsize)) != 0 /*&& r <= nbytes*/) // lectura del fichero abierto anteriormente
-                {
-
-                    write(fdaux, blect, r);
-
-                    i++;
-                }
-            }
-            else
-            {
-                //Error no existe el archivo
-            }
-        }
-        break;
     case 1: // error lb
         fprintf(stderr, "Incompatibles, OUT\n");
-        break;
+        return;
     case 2: //error
         fprintf(stderr, "MAX OUT\n");
-        break;
+        return;
+    }
+
+    int fd = 0;
+    char *blect = malloc(bsize); //reservamos ese numero de bytes (bleidos)
+    if (nlines != 0)             //-l
+    {
+    }
+    else //-b
+    {
+        if ((fd = open(buff[0], O_RDONLY)) != -1)
+        {
+            int i = 0; //indice para los archivos creados
+            int r = 0;
+            int fdaux;
+            char i_Str[12];
+            sprintf(i_Str, "%d", i);
+            //bytes leidos en ese read.
+            while ((read(fd, blect, bsize)) != 0 /*&& r <= nbytes*/) // lectura del fichero abierto anteriormente
+            {
+
+                fdaux = open(strcat(buff[0], i_Str), O_WRONLY | O_CREAT);
+
+                write(fdaux, blect, r);
+
+                i++;
+            }
+        }
+        else
+        {
+            //Error no existe el archivo
+        }
     }
 }
 //funcion que ejecuta el comando una vez comprueba si este es externo o interno
