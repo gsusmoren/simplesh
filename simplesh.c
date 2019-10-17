@@ -43,9 +43,6 @@
 
 static const char *VERSION = "0.19";
 
-//Tamano maximo de BSIZE para psplit
-#define BSIZE_MAX 1048576
-
 // Niveles de depuración
 #define DBG_CMD (1 << 0)
 #define DBG_TRACE (1 << 1)
@@ -88,6 +85,8 @@ static int g_dbg_level = 0;
 
 // Número máximo de argumentos de un comando
 #define MAX_ARGS 16
+
+#define BSIZE_MAX 1048576
 
 // Delimitadores
 static const char WHITESPACE[] = " \t\r\n\v";
@@ -846,101 +845,308 @@ void run_cd(struct execcmd *cmd)
 }
 void run_psplit(struct execcmd *cmd)
 {
-    int opt = 0;
-    int nlines = 0;
-    int nbytes = 1024; //numero maximo de bytes por fichero , b
-    int bsize = 1024;  //tamano en bytes de los bloques leidos
-
-    int error_lb = 0;
-    int f_error = 0;
+    int opt, nlines, nbytes, bsize, error, flag, procs;
+    nlines = 0;
+    nbytes = 1024;
+    bsize = 1024;
+    error = 0;
+    flag = 0;
+    procs = 0;
     optind = 1;
-    while ((f_error == 0) && (opt = getopt(cmd->argc, cmd->argv, "l:b:s:h")) != -1)
+    while (flag == 0 && (opt = getopt(cmd->argc, cmd->argv, "hb:l:s:p:")) != -1)
     {
-
         switch (opt)
         {
         case 'h':
-            fprintf(stdout, "Uso : psplit [-l NLINES]  [-b NBYTES]   [-s BSIZE]  [-p PROCS] [FILE1]  [FILE2]...\n\tOpciones :\n\t-l NLINES Numero maximo de lineas por fichero.\n\t-b NBYTES Numero maximo de bytes por fichero.\n\t-s BSIZE Tamano en bytes de los bloques leidos de [FILEn] o stdin.\n\t-p PROCS Numero maximo de procesdos simultaneos.\n\t-h       Ayuda\n");
-            break;
+            fprintf(stdout, "Uso: psplit [-l NLINES] [-b NBYTES] [-s BSIZE] [-p PROCS] [FILE1] [FILE2]...\n      Opciones:\n      -l NLINES Número máximo de líneas por fichero.\n      -b NBYTES Número máximo de bytes por fichero.\n      -s BSIZE Tamaño en bytes de los bloques leídos de [ FILEn ] o stdin.\n      -p PROCS Número máximo de procesos simultáneos.\n      -h Ayuda\n");
+            return;
         case 'b':
-            error_lb++;
-            if (error_lb < 2)
+            if (error != 0)
             {
-                //TODO
+                flag = 1;
+            }
+            else
+            {
+                error = 1;
+                nbytes = atoi(optarg);
+            }
+            break;
+        case 'l':
+            if (error != 0)
+            {
+                flag = 1;
+            }
+            else
+            {
+                error = 1;
+                nlines = atoi(optarg);
             }
             break;
         case 's':
             bsize = atoi(optarg);
             if (bsize < 1 || bsize > BSIZE_MAX)
-            {
-                f_error = 2; //se pasa de tamaño
-            }
+                flag = 2;
             break;
-        case 'l':
-            error_lb++;
-            if (error_lb < 2)
-            {
-                nlines = atoi(optarg);
-            }
+        case 'p':
+            procs = atoi(optarg);
+            if (procs < 1)
+                flag = 3;
             break;
         default:
-            fprintf(stdout, "Uso : psplit [-l NLINES]  [-b NBYTES]   [-s BSIZE]  [-p PROCS] [FILE1]  [FILE2]...\n");
+            fprintf(stderr, "Usage: %s [-f] [-n NUM]\n", cmd->argv[0]);
             exit(EXIT_FAILURE);
         }
     }
-    if (error_lb >= 2)
-        f_error = 1;
-
-    char *buff[cmd->argc - optind]; //array con el nombre de los ficheros
-    int n_ficheros = 0;
-    for (int i = optind; i < cmd->argc; i++) //optint es index del primer fichero
+    char *buff[cmd->argc - optind];
+    int numFicheros = 0;
+    for (int i = optind; i < cmd->argc; i++)
     {
-        buff[n_ficheros] = cmd->argv[i];
-        n_ficheros++;
-        //printf("%s\n", cmd->argv[i]);
+        buff[numFicheros] = cmd->argv[i];
+        numFicheros++;
+        printf("%s\n", cmd->argv[i]);
     }
 
-    switch (f_error)
+    switch (flag)
     {
-    case 1: // error lb
-        fprintf(stderr, "Incompatibles, OUT\n");
+    case 1:
+        //OPCIONES L Y B
+        fprintf(stderr, "psplit: Opciones incompatibles\n");
         return;
-    case 2: //error
-        fprintf(stderr, "MAX OUT\n");
+    case 2:
+        //TAMAÑO BSIZE
+        fprintf(stderr, "psplit: Opción -s no válida\n");
+        return;
+    case 3:
+        //TAMAÑO DE PROCS
+        fprintf(stderr, "psplit: Opción -p no válda\n");
         return;
     }
 
-    int fd = 0;
-    char *blect = malloc(bsize); //reservamos ese numero de bytes (bleidos)
-    if (nlines != 0)             //-l
-    {
-    }
-    else //-b
-    {
-        if ((fd = open(buff[0], O_RDONLY)) != -1)
+    int fd;
+    char blect[bsize]; //reservamos ese numero de bytes (bleidos)
+    if (numFicheros == 0)
+    { //CASO EN EL QUE TENGAMOS QUE LEER DE LA ENTRADA ESTÁNDAR
+
+        if (nlines != 0)
         {
-            int i = 0; //indice para los archivos creados
-            int r = 0;
-            int fdaux;
-            char i_Str[12];
-            sprintf(i_Str, "%d", i);
-            //bytes leidos en ese read.
-            while ((read(fd, blect, bsize)) != 0 /*&& r <= nbytes*/) // lectura del fichero abierto anteriormente
-            {
-
-                fdaux = open(strcat(buff[0], i_Str), O_WRONLY | O_CREAT);
-
-                write(fdaux, blect, r);
-
-                i++;
-            }
-        }
+        } //-L
         else
+        { //-B
+
+            int i = 0; //indice para los archivos creados
+            int r = 0; //bytes leidos
+            int fdaux;
+            int f_aux = 0;
+            int wb = 0;
+            int wf = 0;
+            char i_Str[strlen("stdin")];
+            //bytes leidos en ese read.
+            while ((r = read(0, blect, bsize)) != 0) // lectura del fichero abierto anteriormente
+            {
+                wb = 0;
+                while (r != 0)
+                {
+                    if (f_aux == 0)
+                    {
+                        sprintf(i_Str, "stdin%d", i);
+                        fdaux = open(i_Str, O_CREAT | O_RDWR, S_IRWXU);
+                        i++;
+                    }
+                    if (r >= nbytes)
+                    {
+                        wb += write(fdaux, blect + wb, nbytes);
+                        r -= nbytes;
+                        f_aux = 0;
+                        close(fdaux);
+                        fsync(fdaux);
+                    }
+                    else
+                    {
+                        if (nbytes - wf < r)
+                        {
+                            wb += write(fdaux, blect + wb, nbytes - wf);
+                            f_aux = 0;
+                            r -= nbytes - wf;
+                            close(fdaux);
+                            fsync(fdaux);
+                        }
+                        else
+                        {
+                            wf += write(fdaux, blect + wb, r);
+                            f_aux = fdaux;
+                            r = 0;
+                        }
+                    }
+                }
+            }
+            close(fdaux);
+            fsync(fdaux);
+        }
+    }
+    else
+    {
+
+        if (nlines != 0) //OPCIÓN -L EN EL CASO QUE HAYAN FICHEROS
         {
-            //Error no existe el archivo
+            /*if ((fd = open(buff[0],O_RDONLY)) != -1){
+	     int saltos = 0;
+	     int indice = 0;
+	     int bytesleidos = 0;
+	     int r;
+	     int fdaux;
+	     char i_Str[20];
+	     while((r = read(fd,blect,bsize))!=0){
+	     	while(r!=0){
+			fdaux = open()
+		}
+	     }
+	}*/
+        }
+        else //OPCIÓN -B EN EL CASO QUE HAYAN FICHEROS
+        {
+            for (int j = 0; j < numFicheros; j++)
+            {
+                if ((fd = open(buff[j], O_RDONLY)) != -1)
+                {
+                    int i = 0; //indice para los archivos creados
+                    int r = 0; //bytes leidos
+                    int fdaux;
+                    int f_aux = 0;
+                    int wb = 0;
+                    int wf = 0;
+                    char i_Str[strlen(buff[j])];
+                    //bytes leidos en ese read.
+                    while ((r = read(fd, blect, bsize)) != 0) // lectura del fichero abierto anteriormente
+                    {
+                        wb = 0;
+                        while (r != 0)
+                        {
+                            if (f_aux == 0)
+                            {
+                                sprintf(i_Str, "%s%d", buff[j], i);
+                                wf = 0;
+                                fdaux = open(i_Str, O_CREAT | O_RDWR, S_IRWXU);
+                                i++;
+                            }
+                            if (r >= nbytes)
+                            {
+                                wb += write(fdaux, blect + wb, nbytes);
+                                r -= nbytes;
+                                f_aux = 0;
+                                close(fdaux);
+                                fsync(fdaux);
+                            }
+                            else
+                            {
+                                if (nbytes - wf < r)
+                                {
+                                    wb += write(fdaux, blect + wb, nbytes - wf);
+                                    f_aux = 0;
+                                    r -= nbytes - wf;
+                                    close(fdaux);
+                                    fsync(fdaux);
+                                }
+                                else
+                                {
+                                    wf += write(fdaux, blect + wb, r);
+                                    f_aux = fdaux;
+                                    r = 0;
+                                }
+                            }
+                        }
+                    }
+                    close(fdaux);
+                    fsync(fdaux);
+
+                    /*if(new_file==1){
+				sprintf(i_Str, "%d", i);				
+				fdaux = open(strcat(buff[0], i_Str), O_CREAT | O_RDWR, S_IRWXU);
+				i++;
+			}
+			
+			
+			
+			if (r>nbytes){  //INTENTAR REALIZAR FUERA EL WHILE (R!=0)
+				w=write(fdaux,blect,nbytes-cont);
+				fsync(fdaux);
+				close(fdaux);
+				r-=w;
+				while(r!=0){
+					fdaux = open(strcat(buff[0], i_Str), O_CREAT | O_RDWR, S_IRWXU);
+					if (r>=nbytes){
+						w+=write(fdaux,blect+w,nbytes);
+						r-=nbytes;	
+					}
+					else{ 
+						write(fdaux,blect+w,r);
+						f_aux = fdaux;						
+						r=0;
+					}
+					i++;
+				}
+			}
+
+			else if (r<(nbytes-cont)){
+				fdaux = open(strcat(buff[0], i_Str), O_CREAT | O_RDWR, S_IRWXU);
+				write(fdaux,blect,r);
+				cont+=r;
+				f_aux = fdaux;
+			}else if(r==nbytes){
+				fdaux= open(strcat(buff[0], i_Str), O_CREAT | O_RDWR, S_IRWXU);
+				write(fdaux,blect,r);
+				
+			}
+		}*/
+
+                    /*printf("0\n");
+		
+
+                if (new_file == 1)
+                {
+                    sprintf(i_Str, "%d", i);
+		    fdaux = open(strcat(buff[0], i_Str), O_CREAT | O_RDWR, S_IRWXU);
+		    printf("1\n");
+		    new_file = 0;
+		    if (resto==1){ 
+			printf("2\n");
+			cont+=write(fdaux,b_resto,bsize);
+			resto=0;
+		    }                 
+		}
+                if ((nbytes - cont) < r)
+                {
+                    cont+=write(fdaux, blect, nbytes - cont);
+		    int m=0;
+		    for(int j=nbytes-cont;j<r;j++){
+			b_resto[m]=blect[j];
+			m++;
+		    }
+		    resto=1;
+                }
+                else
+                {
+                    cont+=write(fdaux, blect, r);
+                }
+
+                if (cont == nbytes)
+                {
+                    new_file = 1;
+                    cont = 0;
+		    close(fdaux);
+		    fsync(fdaux);
+                    i++;
+                }
+            }*/
+                }
+                else
+                {
+                    //Error no existe el archivo
+                }
+            }
         }
     }
 }
+
 //funcion que ejecuta el comando una vez comprueba si este es externo o interno
 int exec_comp(struct execcmd *ecmd)
 
@@ -967,7 +1173,7 @@ int exec_comp(struct execcmd *ecmd)
         free(ecmd);
         run_exit();
         break;
-    case 4: //psplip
+    case 4:
         run_psplit(ecmd);
         break;
     }
