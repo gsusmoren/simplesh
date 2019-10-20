@@ -949,6 +949,7 @@ void run_psplit(struct execcmd *cmd)
 
     int fd;
     char blect[bsize]; //reservamos ese numero de bytes (bleidos)
+    memset(blect, 0, bsize);
     if (numFicheros == 0)
     { //CASO EN EL QUE TENGAMOS QUE LEER DE LA ENTRADA ESTÁNDAR
 
@@ -963,12 +964,12 @@ void run_psplit(struct execcmd *cmd)
             char i_Str[strlen("stdin")];
             int i = 0;
 
-            while ((r = read(0, blect, bsize)) != 0)
+            while ((r = read(0, blect, bsize)) != '\0')
             {
-                //printf("blect: bsize: %")
-                for (int k = 0; k < 2; k++)
-                    printf("%d : %c\n", k, blect[k]);
+                // printf("%s", blect);
+                //printf("-");
                 w = 0;
+                bytesleidos = 0;
                 while (bytesleidos != r)
                 {
                     if (f_aux == 0)
@@ -1015,6 +1016,8 @@ void run_psplit(struct execcmd *cmd)
             while ((r = read(0, blect, bsize)) != 0) // lectura del fichero abierto anteriormente
             {
                 wb = 0;
+                printf("%s", blect);
+                printf("-");
                 while (r != 0)
                 {
                     if (f_aux == 0)
@@ -1074,6 +1077,7 @@ void run_psplit(struct execcmd *cmd)
                     while ((r = read(fd, blect, bsize)) != 0)
                     {
                         w = 0;
+                        bytesleidos = 0;
                         while (bytesleidos != r)
                         {
                             if (f_aux == 0)
