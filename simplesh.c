@@ -843,6 +843,31 @@ void run_cd(struct execcmd *cmd)
         }
     }
 }
+
+/**
+ * Dado un buffer de caracteres devuelve la posicion de donde termina la primera linea ,antes de encontrar un \n, 
+*/
+
+int get_linea_psplit(char *buffer)
+{
+    int i = 0;
+    while (i < strlen(buffer))
+    {
+        if (buffer[i] != '\n')
+        {
+            i++;
+        }
+    }
+    if (buffer[i] != '\n') //ascii retorno de carro
+    {
+        printf("-1");
+        return -1;
+    }
+    else
+        printf("%d", i);
+    return i;
+}
+
 void run_psplit(struct execcmd *cmd)
 {
     int opt, nlines, nbytes, bsize, error, flag, procs;
@@ -903,7 +928,7 @@ void run_psplit(struct execcmd *cmd)
     {
         buff[numFicheros] = cmd->argv[i];
         numFicheros++;
-        printf("%s\n", cmd->argv[i]);
+        //printf("%s\n",cmd->argv[i]);
     }
 
     switch (flag)
@@ -928,8 +953,54 @@ void run_psplit(struct execcmd *cmd)
     { //CASO EN EL QUE TENGAMOS QUE LEER DE LA ENTRADA ESTÁNDAR
 
         if (nlines != 0)
-        {
-        } //-L
+        { //-L
+            int bytesleidos = 0;
+            int lineas = 0;
+            int r;
+            int w;
+            int f_aux = 0;
+            int fdaux;
+            char i_Str[strlen("stdin")];
+            int i = 0;
+
+            while ((r = read(0, blect, bsize)) != 0)
+            {
+                //printf("blect: bsize: %")
+                for (int k = 0; k < 2; k++)
+                    printf("%d : %c\n", k, blect[k]);
+                w = 0;
+                while (bytesleidos != r)
+                {
+                    if (f_aux == 0)
+                    {
+                        sprintf(i_Str, "stdin%d", i);
+                        fdaux = open(i_Str, O_CREAT | O_RDWR, S_IRWXU);
+                        i++;
+                    }
+                    while (lineas != nlines && bytesleidos != r)
+                    {
+                        if (blect[bytesleidos] == '\n')
+                            lineas++;
+                        bytesleidos++;
+                    }
+                    if (lineas == nlines)
+                    {
+                        w += write(fdaux, blect + w, bytesleidos - w);
+                        f_aux = 0;
+                        lineas = 0;
+                        close(fdaux);
+                        fsync(fdaux);
+                    }
+                    else if (bytesleidos == r)
+                    {
+                        write(fdaux, blect + w, r - w);
+                        f_aux = 1;
+                    }
+                }
+            }
+            close(fdaux);
+            fsync(fdaux);
+        }
         else
         { //-B
 
@@ -988,19 +1059,54 @@ void run_psplit(struct execcmd *cmd)
 
         if (nlines != 0) //OPCIÓN -L EN EL CASO QUE HAYAN FICHEROS
         {
-            /*if ((fd = open(buff[0],O_RDONLY)) != -1){
-	     int saltos = 0;
-	     int indice = 0;
-	     int bytesleidos = 0;
-	     int r;
-	     int fdaux;
-	     char i_Str[20];
-	     while((r = read(fd,blect,bsize))!=0){
-	     	while(r!=0){
-			fdaux = open()
-		}
-	     }
-	}*/
+            for (int j = 0; j < numFicheros; j++)
+            {
+                if ((fd = open(buff[j], O_RDONLY)) != -1)
+                {
+                    int bytesleidos = 0;
+                    int lineas = 0;
+                    int r;
+                    int w;
+                    int f_aux = 0;
+                    int fdaux;
+                    char i_Str[20];
+                    int i = 0;
+                    while ((r = read(fd, blect, bsize)) != 0)
+                    {
+                        w = 0;
+                        while (bytesleidos != r)
+                        {
+                            if (f_aux == 0)
+                            {
+                                sprintf(i_Str, "%s%d", buff[j], i);
+                                fdaux = open(i_Str, O_CREAT | O_RDWR, S_IRWXU);
+                                i++;
+                                f_aux = 1;
+                            }
+                            while (lineas != nlines && bytesleidos != r)
+                            {
+                                if (blect[bytesleidos] == '\n')
+                                    lineas++;
+                                bytesleidos++;
+                            }
+                            if (lineas == nlines)
+                            {
+                                w += write(fdaux, blect + w, bytesleidos - w);
+                                f_aux = 0;
+                                lineas = 0;
+                                close(fdaux);
+                                fsync(fdaux);
+                            }
+                            else if (bytesleidos == r)
+                            {
+                                write(fdaux, blect + w, r - w);
+                            }
+                        }
+                    }
+                    close(fdaux);
+                    fsync(fdaux);
+                }
+            }
         }
         else //OPCIÓN -B EN EL CASO QUE HAYAN FICHEROS
         {
@@ -1057,86 +1163,6 @@ void run_psplit(struct execcmd *cmd)
                     }
                     close(fdaux);
                     fsync(fdaux);
-
-                    /*if(new_file==1){
-				sprintf(i_Str, "%d", i);				
-				fdaux = open(strcat(buff[0], i_Str), O_CREAT | O_RDWR, S_IRWXU);
-				i++;
-			}
-			
-			
-			
-			if (r>nbytes){  //INTENTAR REALIZAR FUERA EL WHILE (R!=0)
-				w=write(fdaux,blect,nbytes-cont);
-				fsync(fdaux);
-				close(fdaux);
-				r-=w;
-				while(r!=0){
-					fdaux = open(strcat(buff[0], i_Str), O_CREAT | O_RDWR, S_IRWXU);
-					if (r>=nbytes){
-						w+=write(fdaux,blect+w,nbytes);
-						r-=nbytes;	
-					}
-					else{ 
-						write(fdaux,blect+w,r);
-						f_aux = fdaux;						
-						r=0;
-					}
-					i++;
-				}
-			}
-
-			else if (r<(nbytes-cont)){
-				fdaux = open(strcat(buff[0], i_Str), O_CREAT | O_RDWR, S_IRWXU);
-				write(fdaux,blect,r);
-				cont+=r;
-				f_aux = fdaux;
-			}else if(r==nbytes){
-				fdaux= open(strcat(buff[0], i_Str), O_CREAT | O_RDWR, S_IRWXU);
-				write(fdaux,blect,r);
-				
-			}
-		}*/
-
-                    /*printf("0\n");
-		
-
-                if (new_file == 1)
-                {
-                    sprintf(i_Str, "%d", i);
-		    fdaux = open(strcat(buff[0], i_Str), O_CREAT | O_RDWR, S_IRWXU);
-		    printf("1\n");
-		    new_file = 0;
-		    if (resto==1){ 
-			printf("2\n");
-			cont+=write(fdaux,b_resto,bsize);
-			resto=0;
-		    }                 
-		}
-                if ((nbytes - cont) < r)
-                {
-                    cont+=write(fdaux, blect, nbytes - cont);
-		    int m=0;
-		    for(int j=nbytes-cont;j<r;j++){
-			b_resto[m]=blect[j];
-			m++;
-		    }
-		    resto=1;
-                }
-                else
-                {
-                    cont+=write(fdaux, blect, r);
-                }
-
-                if (cont == nbytes)
-                {
-                    new_file = 1;
-                    cont = 0;
-		    close(fdaux);
-		    fsync(fdaux);
-                    i++;
-                }
-            }*/
                 }
                 else
                 {
@@ -1146,7 +1172,6 @@ void run_psplit(struct execcmd *cmd)
         }
     }
 }
-
 //funcion que ejecuta el comando una vez comprueba si este es externo o interno
 int exec_comp(struct execcmd *ecmd)
 
