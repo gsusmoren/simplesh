@@ -848,26 +848,6 @@ void run_cd(struct execcmd *cmd)
  * Dado un buffer de caracteres devuelve la posicion de donde termina la primera linea ,antes de encontrar un \n, 
 */
 
-int get_linea_psplit(char *buffer)
-{
-    int i = 0;
-    while (i < strlen(buffer))
-    {
-        if (buffer[i] != '\n')
-        {
-            i++;
-        }
-    }
-    if (buffer[i] != '\n') //ascii retorno de carro
-    {
-        printf("-1");
-        return -1;
-    }
-    else
-        printf("%d", i);
-    return i;
-}
-
 void run_psplit(struct execcmd *cmd)
 {
     int opt, nlines, nbytes, bsize, error, flag, procs;
@@ -883,7 +863,7 @@ void run_psplit(struct execcmd *cmd)
         switch (opt)
         {
         case 'h':
-            fprintf(stdout, "Uso: psplit [-l NLINES] [-b NBYTES] [-s BSIZE] [-p PROCS] [FILE1] [FILE2]...\n      Opciones:\n      -l NLINES Número máximo de líneas por fichero.\n      -b NBYTES Número máximo de bytes por fichero.\n      -s BSIZE Tamaño en bytes de los bloques leídos de [ FILEn ] o stdin.\n      -p PROCS Número máximo de procesos simultáneos.\n      -h Ayuda\n");
+            fprintf(stdout, "Uso: psplit [-l NLINES] [-b NBYTES] [-s BSIZE] [-p PROCS] [FILE1] [FILE2]...\n      Opciones:\n      -l NLINES Número máximo de líneas por fichero.\n      -b NBYTES Número máximo de bytes por fichero.\n      -s BSIZE Tamaño en bytes de los bloques leídos de [ FILEn ] o stdin.\n      -p PROCS Número máximo de procesos simultáneos.\n   -h        Ayuda\n\n");
             return;
         case 'b':
             if (error != 0)
@@ -948,29 +928,29 @@ void run_psplit(struct execcmd *cmd)
     }
 
     int fd;
-    char blect[bsize]; //reservamos ese numero de bytes (bleidos)
+    char blect[bsize]; //bytes leidos
+
     memset(blect, 0, bsize);
     if (numFicheros == 0)
     { //CASO EN EL QUE TENGAMOS QUE LEER DE LA ENTRADA ESTÁNDAR
 
         if (nlines != 0)
-        { //-L
-            int bytesleidos = 0;
-            int lineas = 0;
-            int r;
-            int w;
+        {                        //-L
+            int bytesleidos = 0; //bytes comprobados, \n o no
+            int lineas = 0;      //lineas ya en fichero
+            int r = 0;           //bytes leidos del fichero inicial
+            int w = 0;           //bytes escritos ya en fichero, desplamiento en blect
             int f_aux = 0;
-            int fdaux;
+            int fdaux = 0;
             char i_Str[strlen("stdin")];
             int i = 0;
-
-            while ((r = read(0, blect, bsize)) != '\0')
+            int cerrar_fichero = 1;
+            //o lectura de binarios, o bloquear tee?
+            while ((r = read(0, blect, bsize)) != 0)
             {
-                // printf("%s", blect);
-                //printf("-");
                 w = 0;
                 bytesleidos = 0;
-                while (bytesleidos != r)
+                while (bytesleidos != r) //mientras los bytes leidos no sean el tamaño de la lectura
                 {
                     if (f_aux == 0)
                     {
@@ -991,16 +971,23 @@ void run_psplit(struct execcmd *cmd)
                         lineas = 0;
                         close(fdaux);
                         fsync(fdaux);
+
+                        cerrar_fichero = 0;
                     }
                     else if (bytesleidos == r)
                     {
                         write(fdaux, blect + w, r - w);
                         f_aux = 1;
+                        cerrar_fichero = 1;
                     }
                 }
+                memset(blect, 0, bsize);
             }
-            close(fdaux);
-            fsync(fdaux);
+            if (cerrar_fichero == 1)
+            {
+                close(fdaux);
+                fsync(fdaux);
+            }
         }
         else
         { //-B
@@ -1012,12 +999,14 @@ void run_psplit(struct execcmd *cmd)
             int wb = 0;
             int wf = 0;
             char i_Str[strlen("stdin")];
+            int cerrar_fichero = 1;
             //bytes leidos en ese read.
             while ((r = read(0, blect, bsize)) != 0) // lectura del fichero abierto anteriormente
             {
+
+                // printf("%s-", blect);
                 wb = 0;
-                printf("%s", blect);
-                printf("-");
+
                 while (r != 0)
                 {
                     if (f_aux == 0)
@@ -1033,6 +1022,7 @@ void run_psplit(struct execcmd *cmd)
                         f_aux = 0;
                         close(fdaux);
                         fsync(fdaux);
+                        cerrar_fichero = 0;
                     }
                     else
                     {
@@ -1043,18 +1033,25 @@ void run_psplit(struct execcmd *cmd)
                             r -= nbytes - wf;
                             close(fdaux);
                             fsync(fdaux);
+                            cerrar_fichero = 0;
                         }
                         else
                         {
                             wf += write(fdaux, blect + wb, r);
                             f_aux = fdaux;
                             r = 0;
+                            cerrar_fichero = 1;
                         }
                     }
                 }
+                memset(blect, 0, bsize);
             }
-            close(fdaux);
-            fsync(fdaux);
+            //Cerrar cuando se ha quedado a medias un fichero
+            if (cerrar_fichero == 1)
+            {
+                close(fdaux);
+                fsync(fdaux);
+            }
         }
     }
     else
@@ -1076,6 +1073,7 @@ void run_psplit(struct execcmd *cmd)
                     int i = 0;
                     while ((r = read(fd, blect, bsize)) != 0)
                     {
+                        printf("%s-", blect);
                         w = 0;
                         bytesleidos = 0;
                         while (bytesleidos != r)
@@ -1106,6 +1104,7 @@ void run_psplit(struct execcmd *cmd)
                                 write(fdaux, blect + w, r - w);
                             }
                         }
+                        memset(blect, 0, bsize);
                     }
                     close(fdaux);
                     fsync(fdaux);
@@ -1128,6 +1127,8 @@ void run_psplit(struct execcmd *cmd)
                     //bytes leidos en ese read.
                     while ((r = read(fd, blect, bsize)) != 0) // lectura del fichero abierto anteriormente
                     {
+
+                        //  printf("%s-", blect);
                         wb = 0;
                         while (r != 0)
                         {
@@ -1164,6 +1165,7 @@ void run_psplit(struct execcmd *cmd)
                                 }
                             }
                         }
+                        memset(blect, 0, bsize);
                     }
                     close(fdaux);
                     fsync(fdaux);
@@ -1239,7 +1241,7 @@ void run_cmd(struct cmd *cmd)
 
         if (is_interno(((struct execcmd *)rcmd->cmd)->argv[0]))
         {
-            //TRY(close(STDOUT_FILENO));
+
             if ((fd = open(rcmd->file, rcmd->flags, rcmd->mode)) < 0)
             {
                 perror("open");
