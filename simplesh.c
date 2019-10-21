@@ -955,7 +955,7 @@ void run_psplit(struct execcmd *cmd)
                     if (f_aux == 0)
                     {
                         sprintf(i_Str, "stdin%d", i);
-                        fdaux = open(i_Str, O_CREAT | O_RDWR, S_IRWXU);
+                        fdaux = open(i_Str, O_CREAT | O_RDWR | O_TRUNC, S_IRWXU);
                         i++;
                     }
                     while (lineas != nlines && bytesleidos != r)
@@ -1012,7 +1012,7 @@ void run_psplit(struct execcmd *cmd)
                     if (f_aux == 0)
                     {
                         sprintf(i_Str, "stdin%d", i);
-                        fdaux = open(i_Str, O_CREAT | O_RDWR, S_IRWXU);
+                        fdaux = open(i_Str, O_CREAT | O_RDWR | O_TRUNC, S_IRWXU);
                         i++;
                     }
                     if (r >= nbytes)
@@ -1071,6 +1071,7 @@ void run_psplit(struct execcmd *cmd)
                     int fdaux;
                     char i_Str[20];
                     int i = 0;
+                    int cerrar_fichero = 1;
                     while ((r = read(fd, blect, bsize)) != 0)
                     {
                         printf("%s-", blect);
@@ -1081,9 +1082,10 @@ void run_psplit(struct execcmd *cmd)
                             if (f_aux == 0)
                             {
                                 sprintf(i_Str, "%s%d", buff[j], i);
-                                fdaux = open(i_Str, O_CREAT | O_RDWR, S_IRWXU);
+                                fdaux = open(i_Str, O_CREAT | O_RDWR | O_TRUNC, S_IRWXU);
                                 i++;
                                 f_aux = 1;
+                                cerrar_fichero = 0;
                             }
                             while (lineas != nlines && bytesleidos != r)
                             {
@@ -1098,10 +1100,12 @@ void run_psplit(struct execcmd *cmd)
                                 lineas = 0;
                                 close(fdaux);
                                 fsync(fdaux);
+                                cerrar_fichero = 0;
                             }
                             else if (bytesleidos == r)
                             {
                                 write(fdaux, blect + w, r - w);
+                                cerrar_fichero = 1;
                             }
                         }
                         memset(blect, 0, bsize);
@@ -1136,7 +1140,7 @@ void run_psplit(struct execcmd *cmd)
                             {
                                 sprintf(i_Str, "%s%d", buff[j], i);
                                 wf = 0;
-                                fdaux = open(i_Str, O_CREAT | O_RDWR, S_IRWXU);
+                                fdaux = open(i_Str, O_CREAT | O_RDWR | O_TRUNC, S_IRWXU);
                                 i++;
                             }
                             if (r >= nbytes)
