@@ -86,6 +86,8 @@ static int g_dbg_level = 0;
 // Número máximo de argumentos de un comando
 #define MAX_ARGS 16
 
+#define BSIZE_MAX 1048576
+
 // Delimitadores
 static const char WHITESPACE[] = " \t\r\n\v";
 // Caracteres especiales
@@ -841,29 +843,344 @@ void run_cd(struct execcmd *cmd)
         }
     }
 }
-void run_psplit(struct execcmd *ecmd)
-{ /*
-    int opt, flag, n;
-    flag = n = 0;
+
+/**
+ * Dado un buffer de caracteres devuelve la posicion de donde termina la primera linea ,antes de encontrar un \n, 
+*/
+
+void run_psplit(struct execcmd *cmd)
+{
+    int opt, nlines, nbytes, bsize, error, flag, procs;
+    nlines = 0;
+    nbytes = 1024;
+    bsize = 1024;
+    error = 0;
+    flag = 0;
+    procs = 0;
     optind = 1;
-    while ((opt = getopt(argc, argv, "fn:h")) != -1)
+    while (flag == 0 && (opt = getopt(cmd->argc, cmd->argv, "hb:l:s:p:")) != -1)
     {
         switch (opt)
         {
-        case 'f':
-            flag = 1;
+        case 'h':
+            fprintf(stdout, "Uso: psplit [-l NLINES] [-b NBYTES] [-s BSIZE] [-p PROCS] [FILE1] [FILE2]...\n      Opciones:\n      -l NLINES Número máximo de líneas por fichero.\n      -b NBYTES Número máximo de bytes por fichero.\n      -s BSIZE Tamaño en bytes de los bloques leídos de [ FILEn ] o stdin.\n      -p PROCS Número máximo de procesos simultáneos.\n   -h        Ayuda\n\n");
+            return;
+        case 'b':
+            if (error != 0)
+            {
+                flag = 1;
+            }
+            else
+            {
+                error = 1;
+                nbytes = atoi(optarg);
+            }
             break;
-        case 'n':
-            n = atoi(optarg);
+        case 'l':
+            if (error != 0)
+            {
+                flag = 1;
+            }
+            else
+            {
+                error = 1;
+                nlines = atoi(optarg);
+            }
+            break;
+        case 's':
+            bsize = atoi(optarg);
+            if (bsize < 1 || bsize > BSIZE_MAX)
+                flag = 2;
+            break;
+        case 'p':
+            procs = atoi(optarg);
+            if (procs < 1)
+                flag = 3;
             break;
         default:
-            fprintf(stderr, "Usage: %s [-f] [-n NUM]\n", argv[0]);
+            fprintf(stderr, "Usage: %s [-f] [-n NUM]\n", cmd->argv[0]);
             exit(EXIT_FAILURE);
         }
     }
-    for (int i = optind; i < argc; i++)
-        printf("%s\n", argv[i]);
-*/
+    char *buff[cmd->argc - optind];
+    int numFicheros = 0;
+    for (int i = optind; i < cmd->argc; i++)
+    {
+        buff[numFicheros] = cmd->argv[i];
+        numFicheros++;
+        //printf("%s\n",cmd->argv[i]);
+    }
+
+    switch (flag)
+    {
+    case 1:
+        //OPCIONES L Y B
+        fprintf(stderr, "psplit: Opciones incompatibles\n");
+        return;
+    case 2:
+        //TAMAÑO BSIZE
+        fprintf(stderr, "psplit: Opción -s no válida\n");
+        return;
+    case 3:
+        //TAMAÑO DE PROCS
+        fprintf(stderr, "psplit: Opción -p no válida\n");
+        return;
+    }
+
+    int fd;
+    char blect[bsize]; //bytes leidos
+
+    memset(blect, 0, bsize);
+    if (numFicheros == 0)
+    { //CASO EN EL QUE TENGAMOS QUE LEER DE LA ENTRADA ESTÁNDAR
+
+        if (nlines != 0)
+        {                        //-L
+            int bytesleidos = 0; //bytes comprobados, \n o no
+            int lineas = 0;      //lineas ya en fichero
+            int r = 0;           //bytes leidos del fichero inicial
+            int w = 0;           //bytes escritos ya en fichero, desplamiento en blect
+            int f_aux = 0;
+            int fdaux = 0;
+            char i_Str[strlen("stdin")];
+            int i = 0;
+            int cerrar_fichero = 1;
+            //o lectura de binarios, o bloquear tee?
+            while ((r = read(0, blect, bsize)) != 0)
+            {
+                w = 0;
+                bytesleidos = 0;
+                while (bytesleidos != r) //mientras los bytes leidos no sean el tamaño de la lectura
+                {
+                    if (f_aux == 0)
+                    {
+                        sprintf(i_Str, "stdin%d", i);
+                        fdaux = open(i_Str, O_CREAT | O_RDWR | O_TRUNC, S_IRWXU);
+                        i++;
+                    }
+                    while (lineas != nlines && bytesleidos != r)
+                    {
+                        if (blect[bytesleidos] == '\n')
+                            lineas++;
+                        bytesleidos++;
+                    }
+                    if (lineas == nlines)
+                    {
+                        w += write(fdaux, blect + w, bytesleidos - w);
+                        f_aux = 0;
+                        lineas = 0;
+                        close(fdaux);
+                        //   fsync(fdaux);
+
+                        cerrar_fichero = 0;
+                    }
+                    else if (bytesleidos == r)
+                    {
+                        write(fdaux, blect + w, r - w);
+                        f_aux = 1;
+                        cerrar_fichero = 1;
+                    }
+                }
+                memset(blect, 0, bsize);
+            }
+            if (cerrar_fichero == 1)
+            {
+                close(fdaux);
+                //fsync(fdaux);
+            }
+        }
+        else
+        { //-B
+
+            int i = 0; //indice para los archivos creados
+            int r = 0; //bytes leidos
+            int fdaux;
+            int f_aux = 0;
+            int wb = 0;
+            int wf = 0;
+            char i_Str[strlen("stdin")];
+            int cerrar_fichero = 1;
+            //bytes leidos en ese read.
+            while ((r = read(0, blect, bsize)) != 0)
+            {
+
+                wb = 0;
+
+                while (r != 0)
+                {
+                    if (f_aux == 0)
+                    {
+                        sprintf(i_Str, "stdin%d", i);
+                        fdaux = open(i_Str, O_CREAT | O_RDWR | O_TRUNC, S_IRWXU);
+                        i++;
+                    }
+                    /*if (r >= nbytes)
+                    {
+                        wb += write(fdaux, blect + wb, nbytes);
+                        r -= nbytes;
+                        f_aux = 0;
+                        close(fdaux);
+                        fsync(fdaux);
+                        cerrar_fichero = 0;
+                    }
+                    else
+                    {*/
+                    if (nbytes - wf <= r)
+                    {
+                        wb += write(fdaux, blect + wb, nbytes - wf);
+                        f_aux = 0;
+                        r -= nbytes - wf;
+                        close(fdaux);
+                        fsync(fdaux);
+                        wf = 0;
+                        cerrar_fichero = 0;
+                    }
+                    else
+                    {
+                        wf += write(fdaux, blect + wb, r);
+                        f_aux = fdaux;
+                        r = 0;
+                        cerrar_fichero = 1;
+                    }
+                    //}
+                }
+                //  memset(blect, 0, bsize);
+            }
+            //Cerrar cuando se ha quedado a medias un fichero
+            if (cerrar_fichero == 1)
+            {
+                close(fdaux);
+                fsync(fdaux);
+            }
+        }
+    }
+    else
+    {
+
+        if (nlines != 0) //OPCIÓN -L EN EL CASO QUE HAYAN FICHEROS
+        {
+            for (int j = 0; j < numFicheros; j++)
+            {
+                if ((fd = open(buff[j], O_RDONLY)) != -1)
+                {
+                    int bytesleidos = 0;
+                    int lineas = 0;
+                    int r;
+                    int w;
+                    int f_aux = 0;
+                    int fdaux;
+                    char i_Str[20];
+                    int i = 0;
+                    int cerrar_fichero = 1;
+                    while ((r = read(fd, blect, bsize)) != 0)
+                    {
+                        printf("%s-", blect);
+                        w = 0;
+                        bytesleidos = 0;
+                        while (bytesleidos != r)
+                        {
+                            if (f_aux == 0)
+                            {
+                                sprintf(i_Str, "%s%d", buff[j], i);
+                                fdaux = open(i_Str, O_CREAT | O_RDWR | O_TRUNC, S_IRWXU);
+                                i++;
+                                f_aux = 1;
+                                cerrar_fichero = 0;
+                            }
+                            while (lineas != nlines && bytesleidos != r)
+                            {
+                                if (blect[bytesleidos] == '\n')
+                                    lineas++;
+                                bytesleidos++;
+                            }
+                            if (lineas == nlines)
+                            {
+                                w += write(fdaux, blect + w, bytesleidos - w);
+                                f_aux = 0;
+                                lineas = 0;
+                                close(fdaux);
+                                fsync(fdaux);
+                                cerrar_fichero = 0;
+                            }
+                            else if (bytesleidos == r)
+                            {
+                                write(fdaux, blect + w, r - w);
+                                cerrar_fichero = 1;
+                            }
+                        }
+                        memset(blect, 0, bsize);
+                    }
+                    close(fdaux);
+                    fsync(fdaux);
+                }
+            }
+        }
+        else //OPCIÓN -B EN EL CASO QUE HAYAN FICHEROS
+        {
+            for (int j = 0; j < numFicheros; j++)
+            {
+                if ((fd = open(buff[j], O_RDONLY)) != -1)
+                {
+                    int i = 0; //indice para los archivos creados
+                    int r = 0; //bytes leidos
+                    int fdaux;
+                    int f_aux = 0;
+                    int wb = 0;
+                    int wf = 0;
+                    char i_Str[strlen(buff[j])];
+                    //bytes leidos en ese read.
+                    while ((r = read(fd, blect, bsize)) != 0) // lectura del fichero abierto anteriormente
+                    {
+
+                        wb = 0;
+                        while (r != 0)
+                        {
+                            if (f_aux == 0)
+                            {
+                                sprintf(i_Str, "%s%d", buff[j], i);
+                                wf = 0;
+                                fdaux = open(i_Str, O_CREAT | O_RDWR | O_TRUNC, S_IRWXU);
+                                i++;
+                            }
+                            /* if (r >= nbytes)
+                            {
+                                wb += write(fdaux, blect + wb, nbytes);
+                                r -= nbytes;
+                                f_aux = 0;
+                                close(fdaux);
+                                fsync(fdaux);
+                            }
+                            else
+                            {*/
+                            if (nbytes - wf < r)
+                            {
+                                wb += write(fdaux, blect + wb, nbytes - wf);
+                                f_aux = 0;
+                                r -= nbytes - wf;
+                                close(fdaux);
+                                fsync(fdaux);
+                                wf = 0;
+                            }
+                            else
+                            {
+                                wf += write(fdaux, blect + wb, r);
+                                f_aux = fdaux;
+                                r = 0;
+                            }
+                            //}
+                        }
+                        memset(blect, 0, bsize);
+                    }
+                    close(fdaux);
+                    fsync(fdaux);
+                }
+                else
+                {
+                    //Error no existe el archivo
+                }
+            }
+        }
+    }
 }
 //funcion que ejecuta el comando una vez comprueba si este es externo o interno
 int exec_comp(struct execcmd *ecmd)
@@ -893,6 +1210,7 @@ int exec_comp(struct execcmd *ecmd)
         break;
     case 4:
         run_psplit(ecmd);
+        break;
     }
     return numCmd;
 }
@@ -927,7 +1245,7 @@ void run_cmd(struct cmd *cmd)
 
         if (is_interno(((struct execcmd *)rcmd->cmd)->argv[0]))
         {
-            //TRY(close(STDOUT_FILENO));
+
             if ((fd = open(rcmd->file, rcmd->flags, rcmd->mode)) < 0)
             {
                 perror("open");
